@@ -1,0 +1,59 @@
+version: '3.9'
+
+services:
+  db:
+    image: mariadb:10.11
+    container_name: passbolt-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_p@ssw0rd}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-passbolt}
+      MYSQL_USER: ${MYSQL_USER:-passbolt}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-P@ssbolt!2024}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - passbolt-net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  passbolt:
+    image: passbolt/passbolt:latest-ce
+    container_name: passbolt-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_FULL_BASE_URL: ${APP_FULL_BASE_URL:-https://passbolt.local:8443}
+      DATASOURCES_DEFAULT_HOST: db
+      DATASOURCES_DEFAULT_USERNAME: ${MYSQL_USER:-passbolt}
+      DATASOURCES_DEFAULT_PASSWORD: ${MYSQL_PASSWORD:-P@ssbolt!2024}
+      DATASOURCES_DEFAULT_DATABASE: ${MYSQL_DATABASE:-passbolt}
+      # SMTP (optional — configure for email notifications)
+      EMAIL_DEFAULT_FROM: ${EMAIL_FROM:-noreply@passbolt.local}
+      EMAIL_TRANSPORT_DEFAULT_HOST: ${SMTP_HOST:-}
+      EMAIL_TRANSPORT_DEFAULT_PORT: ${SMTP_PORT:-587}
+      EMAIL_TRANSPORT_DEFAULT_USERNAME: ${SMTP_USER:-}
+      EMAIL_TRANSPORT_DEFAULT_PASSWORD: ${SMTP_PASSWORD:-}
+      EMAIL_TRANSPORT_DEFAULT_TLS: ${SMTP_TLS:-true}
+    volumes:
+      - gpg_data:/etc/passbolt/gpg
+      - jwt_data:/etc/passbolt/jwt
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    networks:
+      - passbolt-net
+
+volumes:
+  db_data:
+  gpg_data:
+  jwt_data:
+
+networks:
+  passbolt-net:
+    driver: bridge
